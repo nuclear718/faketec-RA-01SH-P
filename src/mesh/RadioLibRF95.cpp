@@ -1,11 +1,18 @@
 #if RADIOLIB_EXCLUDE_SX127X != 1
-#include "RadioLibRF95.h"
 #include "configuration.h"
+#include "RadioLibRF95.h"
+
+#ifndef RF95_CURRENT_LIMIT
+#define RF95_CURRENT_LIMIT 100
+#endif
 
 // From datasheet but radiolib doesn't know anything about this
 #define SX127X_REG_TCXO 0x4B
 
-RadioLibRF95::RadioLibRF95(Module *mod) : SX1278(mod) {}
+RadioLibRF95::RadioLibRF95(Module *mod) : SX1278(mod)
+{
+    currentLimit = RF95_CURRENT_LIMIT;
+}
 
 int16_t RadioLibRF95::begin(float freq, float bw, uint8_t sf, uint8_t cr, uint8_t syncWord, int8_t power, uint16_t preambleLength,
                             uint8_t gain)

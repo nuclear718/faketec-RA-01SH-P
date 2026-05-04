@@ -202,6 +202,15 @@ const RegionInfo regions[] = {
 const RegionInfo *myRegion;
 bool RadioInterface::uses_default_frequency_slot = true;
 
+static uint8_t getEffectiveRegionPowerLimit()
+{
+#ifdef LORA_TW_POWER_LIMIT_OVERRIDE
+    if (myRegion && myRegion->code == meshtastic_Config_LoRaConfig_RegionCode_TW)
+        return LORA_TW_POWER_LIMIT_OVERRIDE;
+#endif
+    return myRegion ? myRegion->powerLimit : 0;
+}
+
 static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1];
 
 void initRegion()
@@ -558,8 +567,9 @@ void RadioInterface::applyModemConfig()
 
     power = loraConfig.tx_power;
 
-    if ((power == 0) || ((power > myRegion->powerLimit) && !devicestate.owner.is_licensed))
-        power = myRegion->powerLimit;
+    const uint8_t regionPowerLimit = getEffectiveRegionPowerLimit();
+    if ((power == 0) || ((power > regionPowerLimit) && !devicestate.owner.is_licensed))
+        power = regionPowerLimit;
 
     if (power == 0)
         power = 17; // Default to this power level if we don't have a valid regional power limit (powerLimit of myRegion defaults
@@ -638,8 +648,9 @@ void RadioInterface::limitPower(int8_t loraMaxPower)
 {
     uint8_t maxPower = 255; // No limit
 
-    if (myRegion->powerLimit)
-        maxPower = myRegion->powerLimit;
+    const uint8_t regionPowerLimit = getEffectiveRegionPowerLimit();
+    if (regionPowerLimit)
+        maxPower = regionPowerLimit;
 
     if ((power > maxPower) && !devicestate.owner.is_licensed) {
         LOG_INFO("Lower transmit power because of regulatory limits");
