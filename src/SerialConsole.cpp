@@ -30,11 +30,16 @@ SerialConsole *console;
 
 void consoleInit()
 {
+    if (console) {
+        return;
+    }
     auto sc = new SerialConsole(); // Must be dynamically allocated because we are now inheriting from thread
 
 #if defined(SERIAL_HAS_ON_RECEIVE)
     // onReceive does only exist for HardwareSerial not for USB CDC serial
     Port.onReceive([sc]() { sc->rxInt(); });
+#else
+    (void)sc;
 #endif
     DEBUG_PORT.rpInit(); // Simply sets up semaphore
 }
@@ -50,6 +55,7 @@ void consolePrintf(const char *format, ...)
 
 SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), concurrency::OSThread("SerialConsole")
 {
+    api_type = TYPE_SERIAL;
     assert(!console);
     console = this;
     canWrite = false; // We don't send packets to our port until it has talked to us first

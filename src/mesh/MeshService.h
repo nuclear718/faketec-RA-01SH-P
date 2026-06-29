@@ -79,6 +79,18 @@ class MeshService
     uint32_t oldFromNum = 0;
 
   public:
+    enum APIState {
+        STATE_DISCONNECTED, // Initial state, no API is connected
+        STATE_BLE,
+        STATE_WIFI,
+        STATE_SERIAL,
+        STATE_PACKET,
+        STATE_HTTP,
+        STATE_ETH
+    };
+
+    APIState api_state = STATE_DISCONNECTED;
+
     static bool isTextPayload(const meshtastic_MeshPacket *p)
     {
         if (moduleConfig.range_test.enabled && p->decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP) {
@@ -128,6 +140,12 @@ class MeshService
 
     /// Release the next ClientNotification packet to pool.
     void releaseClientNotificationToPool(meshtastic_ClientNotification *p) { clientNotificationPool.release(p); }
+
+    /// Bump fromNum to signal connected clients to poll for new FromRadio data.
+    /// Used by code paths (e.g. lockdown status queueing) that surface a new
+    /// FromRadio variant without going through one of the existing pool-backed
+    /// senders.
+    void nudgeFromNum() { fromNum++; }
 
     /**
      *  Given a ToRadio buffer parse it and properly handle it (setup radio, owner or send packet into the mesh)

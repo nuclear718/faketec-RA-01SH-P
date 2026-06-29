@@ -126,15 +126,10 @@ void RF95Interface::setTransmitEnable(bool txon)
 /// \return true if initialisation succeeded.
 bool RF95Interface::init()
 {
-#ifdef RF95_ALLOW_20DBM_TX_POWER
-    const int8_t requestedTxPower = config.lora.tx_power;
-#endif
-
     RadioLibInterface::init();
 
 #ifdef RF95_ALLOW_20DBM_TX_POWER
-    power = normalizeRequestedRF95Power(requestedTxPower);
-    config.lora.tx_power = power;
+    power = normalizeRequestedRF95Power(power);
 #endif
 
 #if defined(RADIOMASTER_900_BANDIT_NANO) || defined(RADIOMASTER_900_BANDIT)
@@ -204,6 +199,9 @@ bool RF95Interface::init()
 
     int res = lora->begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength);
     LOG_INFO("RF95 init result %d", res);
+    if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED)
+        return false;
+
     LOG_INFO("Frequency set to %f", getFreq());
     LOG_INFO("Bandwidth set to %f", bw);
     LOG_INFO("Power output set to %d", power);
@@ -220,22 +218,17 @@ bool RF95Interface::init()
     return res == RADIOLIB_ERR_NONE;
 }
 
-void INTERRUPT_ATTR RF95Interface::disableInterrupt()
+void RF95Interface::disableInterrupt()
 {
     lora->clearDio0Action();
 }
 
 bool RF95Interface::reconfigure()
 {
-#ifdef RF95_ALLOW_20DBM_TX_POWER
-    const int8_t requestedTxPower = config.lora.tx_power;
-#endif
-
     RadioLibInterface::reconfigure();
 
 #ifdef RF95_ALLOW_20DBM_TX_POWER
-    power = normalizeRequestedRF95Power(requestedTxPower);
-    config.lora.tx_power = power;
+    power = normalizeRequestedRF95Power(power);
 #endif
 
     // set mode to standby
@@ -273,8 +266,7 @@ bool RF95Interface::reconfigure()
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
-    if (power > RF95_MAX_POWER) // This chip has lower power limits than some
-        power = RF95_MAX_POWER;
+    limitPower(RF95_MAX_POWER);
 
 #ifdef USE_RF95_RFO
     err = lora->setOutputPower(power, true);
@@ -286,7 +278,7 @@ bool RF95Interface::reconfigure()
 
     startReceive(); // restart receiving
 
-    return RADIOLIB_ERR_NONE;
+    return true;
 }
 
 /**
@@ -296,6 +288,7 @@ void RF95Interface::addReceiveMetadata(meshtastic_MeshPacket *mp)
 {
     mp->rx_snr = lora->getSNR();
     mp->rx_rssi = lround(lora->getRSSI());
+    LOG_DEBUG("Corrected frequency offset: %f", lora->getFrequencyError());
 }
 
 void RF95Interface::setStandby()
@@ -333,6 +326,7 @@ void RF95Interface::startReceive()
 
     // Must be done AFTER, starting receive, because startReceive clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
+    checkRxDoneIrqFlag();
 }
 
 bool RF95Interface::isChannelActive()
@@ -372,5 +366,11 @@ bool RF95Interface::sleep()
 #endif
 
     return true;
+}
+
+int16_t RF95Interface::getCurrentRSSI()
+{
+    float rssi = lora->getRSSI(false);
+    return (int16_t)round(rssi);
 }
 #endif

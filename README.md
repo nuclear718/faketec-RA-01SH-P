@@ -4,6 +4,8 @@
 
 本 fork 不再以支援所有 Meshtastic 官方硬體為主要目標，而是聚焦在 `SuperMini nRF52840` 搭配 `Adafruit RFM95W` LoRa 模組的低功耗節點。這個硬體組合成本低、容易自行組裝，並且因為 nRF52840 的低功耗特性，適合長時間作為 NTsocial 專案中的 Meshtastic 節點使用。
 
+目前原始碼已同步到 Meshtastic 官方 `develop` 2.8 系列，並保留本專案的 `nrf52_promicro_diy_xtal` / RFM95W 硬體差異。既有 `release/` 內 UF2 檔若檔名仍標示 2.7.12，代表它是同步前的已編譯產物；重新發佈前請以新版原始碼重新編譯。
+
 ## 專案定位
 
 NTsocial 需要的是一套穩定、清楚、容易讓使用者刷入的 Meshtastic 韌體流程。官方 Meshtastic 韌體提供了完整基礎，但通用韌體和上游設定不一定完全符合 `SuperMini nRF52840 + Adafruit RFM95W` 的接線、低功耗和實際使用需求。

@@ -80,7 +80,6 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 
 // LED
 #define PIN_LED1 (0 + 15) // P0.15
-#define LED_BUILTIN PIN_LED1
 // Actually red
 #define LED_BLUE PIN_LED1
 #define LED_STATE_ON 1 // State when LED is lit
@@ -89,17 +88,16 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 #define BUTTON_PIN (32 + 0) // P1.00
 
 // GPS
-#define PIN_GPS_TX (0 + 22) // P0.22
-#define PIN_GPS_RX (0 + 20) // P0.20
+#define GPS_TX_PIN (0 + 20) // P0.20 - MCU TX to GPS RX
+#define GPS_RX_PIN (0 + 22) // P0.22 - MCU RX from GPS TX
 
 #define PIN_GPS_EN (0 + 29) // P0.29; P0.24 is used by RFM95W CS
-#define GPS_POWER_TOGGLE
 #define GPS_UBLOX
 // define GPS_DEBUG
 
 // UART interfaces
-#define PIN_SERIAL1_RX PIN_GPS_TX
-#define PIN_SERIAL1_TX PIN_GPS_RX
+#define PIN_SERIAL1_TX GPS_TX_PIN
+#define PIN_SERIAL1_RX GPS_RX_PIN
 
 #define PIN_SERIAL2_RX (32 + 1) // P1.01; P0.06 is used by RFM95W MOSI
 #define PIN_SERIAL2_TX (32 + 2) // P1.02; P0.08 is used by RFM95W MISO
@@ -126,6 +124,7 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 // Do not define USE_RF95_RFO for this module, or RadioLib will use the lower-power RFO path.
 #define RF95_MAX_POWER 20
 #define RF95_CURRENT_LIMIT 120
+#define RF95_ALLOW_20DBM_TX_POWER
 #define LORA_TW_POWER_LIMIT_OVERRIDE 20
 
 #ifdef __cplusplus

@@ -36,3 +36,10 @@ void initVariant()
     pinMode(PIN_3V3_EN, OUTPUT);
     digitalWrite(PIN_3V3_EN, HIGH);
 }
+
+void variant_shutdown()
+{
+    nrf_gpio_cfg_input(BUTTON_PIN, NRF_GPIO_PIN_PULLUP);
+    nrf_gpio_pin_sense_t sense = NRF_GPIO_PIN_SENSE_LOW;
+    nrf_gpio_cfg_sense_set(BUTTON_PIN, sense);
+}
