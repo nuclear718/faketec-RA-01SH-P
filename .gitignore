@@ -1,4 +1,15 @@
-.pio
+# PlatformIO build workspace is generated and mostly platform-local.
+# Keep caches and object files ignored, but allow built firmware artifacts
+# for the custom nrf52_promicro_diy_xtal target to be committed.
+.pio/*
+!.pio/build/
+.pio/build/*
+!.pio/build/nrf52_promicro_diy_xtal/
+.pio/build/nrf52_promicro_diy_xtal/*
+!.pio/build/nrf52_promicro_diy_xtal/firmware-nrf52_promicro_diy_xtal-*.uf2
+!.pio/build/nrf52_promicro_diy_xtal/firmware-nrf52_promicro_diy_xtal-*.zip
+!.pio/build/nrf52_promicro_diy_xtal/firmware-nrf52_promicro_diy_xtal-*.hex
+!.pio/build/nrf52_promicro_diy_xtal/firmware-nrf52_promicro_diy_xtal-*.mt.json
 pio
 pio.tar
 web
