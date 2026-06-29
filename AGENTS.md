@@ -20,6 +20,79 @@
 
 This repository is the [Meshtastic](https://meshtastic.org) firmware — a C++17 embedded codebase targeting ESP32 / nRF52 / RP2040 / STM32WL / Linux-Portduino LoRa mesh radios — plus a Python MCP server in `mcp-server/` that AI agents use to flash, configure, and test connected devices.
 
+## Fork-specific notes: faketec RA-01SH-P / NTsocial
+
+This repository is an independent fork of `meshtastic/firmware`, not a clean upstream checkout. Preserve local hardware support unless the operator explicitly asks to remove it.
+
+Current upstream sync baseline:
+
+- Official source synced from `https://github.com/meshtastic/firmware.git`.
+- Last merged official branch: `develop`.
+- Official commit included in this fork: `b44ed4552`.
+- Local merge commit: `4d6508754`.
+- Firmware artifact tracking commit: `7ff14bbfe`.
+- Firmware version after sync: `2.8.0`.
+
+If the `meshtastic-official` remote is not configured, refresh the official tracking ref with:
+
+```powershell
+git fetch https://github.com/meshtastic/firmware.git develop:refs/remotes/meshtastic-official/develop
+```
+
+### Custom nRF52 Pro Micro XTAL target
+
+The local board target `nrf52_promicro_diy_xtal` is intentional and must be preserved even if upstream deletes or reshapes nearby DIY variants.
+
+Key files:
+
+- `variants/nrf52840/diy/nrf52_promicro_diy_xtal/platformio.ini`
+- `variants/nrf52840/diy/nrf52_promicro_diy_xtal/variant.h`
+- `variants/nrf52840/diy/nrf52_promicro_diy_xtal/variant.cpp`
+- `src/mesh/RadioInterface.cpp`
+- `src/mesh/RF95Interface.cpp`
+- `src/mesh/RadioLibRF95.cpp`
+
+Preserve these local hardware assumptions:
+
+- MCU target: `promicro-nrf52840`.
+- Meshtastic env: `nrf52_promicro_diy_xtal`.
+- LoRa radio: RFM95W / SX127x using `USE_RF95`.
+- SPI pins: MISO `P0.08`, MOSI `P0.06`, SCK `P0.17`.
+- Radio pins: CS `P0.24`, DIO0/IRQ `P0.11`, RESET `P0.09`.
+- GPS pins use the upstream 2.8 names: `GPS_TX_PIN` for MCU TX to GPS RX and `GPS_RX_PIN` for MCU RX from GPS TX.
+- RF95 custom power behavior is intentional:
+  - `RF95_MAX_POWER 20`
+  - `RF95_CURRENT_LIMIT 120`
+  - `RF95_ALLOW_20DBM_TX_POWER`
+  - `LORA_TW_POWER_LIMIT_OVERRIDE 20`
+
+`RadioInterface.cpp` uses `getEffectiveRegionPowerLimit()` so Taiwan (`TW`) can keep the local 20 dBm override while still following upstream 2.8 power-limit logic. `RF95Interface.cpp` normalizes RF95 requested power without directly reading `config.lora`, because upstream 2.8 refactored that area. Do not revert these changes when merging upstream.
+
+`variant.cpp` should keep upstream-compatible `variant_shutdown()` support for wake/sense behavior.
+
+### Build and firmware artifacts
+
+Preferred build command on this Windows workspace:
+
+```powershell
+py -3.12 -m platformio run -e nrf52_promicro_diy_xtal
+```
+
+Use `pio run -e nrf52_promicro_diy_xtal` only when PlatformIO is available on `PATH`. PlatformIO was installed as a Python 3.12 user module, so `py -3.12 -m platformio` is the reliable invocation here.
+
+The validated 2.8.0 build produced:
+
+```text
+.pio/build/nrf52_promicro_diy_xtal/firmware-nrf52_promicro_diy_xtal-2.8.0.4d65087.uf2
+.pio/build/nrf52_promicro_diy_xtal/firmware-nrf52_promicro_diy_xtal-2.8.0.4d65087.zip
+.pio/build/nrf52_promicro_diy_xtal/firmware-nrf52_promicro_diy_xtal-2.8.0.4d65087.hex
+.pio/build/nrf52_promicro_diy_xtal/firmware-nrf52_promicro_diy_xtal-2.8.0.4d65087.mt.json
+```
+
+Do not commit the whole `.pio` directory. It contains PlatformIO caches, dependency checkouts, objects, and local build databases. `.gitignore` intentionally tracks only the custom target's release artifacts (`uf2`, `zip`, `hex`, `mt.json`) and continues to ignore generated caches and intermediate files.
+
+Before publishing a firmware artifact, rebuild from the current commit so the filename hash matches `HEAD`. Remove stale firmware artifacts with older hashes unless the operator explicitly wants to archive them.
+
 ## Primary instruction file
 
 **Read `.github/copilot-instructions.md` first.** That file is the canonical agent-facing document for this repo. It covers project layout, coding conventions (naming, module framework, Observer pattern, thread safety), the build system, CI/CD, the native C++ test suite, and — most importantly for automation work — the **MCP Server & Hardware Test Harness** section. Read it top-to-bottom before starting any non-trivial change.
