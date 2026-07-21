@@ -88,6 +88,11 @@ meshtastic_ChannelFile channelFile;
 #ifdef USERPREFS_USE_ADMIN_KEY_0
 static unsigned char userprefs_admin_key_0[] = USERPREFS_USE_ADMIN_KEY_0;
 #endif
+
+#ifdef USERPREFS_FIXED_BLUETOOTH
+static_assert(USERPREFS_FIXED_BLUETOOTH >= 100000 && USERPREFS_FIXED_BLUETOOTH <= 999999,
+              "USERPREFS_FIXED_BLUETOOTH must be a six-digit PIN");
+#endif
 #ifdef USERPREFS_USE_ADMIN_KEY_1
 static unsigned char userprefs_admin_key_1[] = USERPREFS_USE_ADMIN_KEY_1;
 #endif
@@ -2335,6 +2340,15 @@ void NodeDB::loadFromDisk()
     } else {
         LOG_INFO("Loaded saved config version %d", config.version);
     }
+
+#ifdef USERPREFS_FIXED_BLUETOOTH
+    if (!configDecodeFailed && config.has_bluetooth &&
+        config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN &&
+        config.bluetooth.fixed_pin == defaultBLEPin) {
+        config.bluetooth.fixed_pin = USERPREFS_FIXED_BLUETOOTH;
+        LOG_INFO("Migrated the default Bluetooth PIN");
+    }
+#endif
 
     // Coerce LoRa config fields derived from presets while bootstrapping.
     // Some clients/UI components display bandwidth/spread_factor directly from config even in preset mode.

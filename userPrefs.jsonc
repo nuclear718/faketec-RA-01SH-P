@@ -26,7 +26,7 @@
   // "USERPREFS_EVENT_MODE": "1",
   // "USERPREFS_TMM_APPLY_TO_PRIVATE_CHANNELS": "1", // Extend TMM position dedup and precision clamping to private/custom-key channels (default: well-known channels only)
   // "USERPREFS_FIRMWARE_EDITION": "meshtastic_FirmwareEdition_BURNING_MAN",
-  // "USERPREFS_FIXED_BLUETOOTH": "121212",
+  "USERPREFS_FIXED_BLUETOOTH": "354984",
   // "USERPREFS_FIXED_GPS": "",
   // "USERPREFS_FIXED_GPS_ALT": "0",
   // "USERPREFS_FIXED_GPS_LAT": "48.85873920",
