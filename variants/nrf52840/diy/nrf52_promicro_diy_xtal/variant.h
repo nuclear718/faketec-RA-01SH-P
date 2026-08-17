@@ -8,6 +8,8 @@
 #define USE_LFRC // Board uses RC for LF
 
 #define PROMICRO_DIY_XTAL
+#define HAS_NRF52_DUAL_BATTERY_SENSE
+#define HAS_NRF52_VBUS_DETECT
 /*----------------------------------------------------------------------------
  *        Headers
  *----------------------------------------------------------------------------*/
@@ -58,12 +60,13 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 #define ADC_RESOLUTION 14
 #define BATTERY_SENSE_RESOLUTION_BITS 12
 #define BATTERY_SENSE_RESOLUTION 4096.0
+#define BATTERY_SENSE_SAMPLE_TIME 40
 // Definition of milliVolt per LSB => 3.0V ADC range and 12-bit ADC resolution = 3000mV/4096
 #define VBAT_MV_PER_LSB (0.73242188F)
-// Voltage divider value => 1.5M + 1M voltage divider on VBAT = (1.5M / (1M + 1.5M))
-#define VBAT_DIVIDER (0.6F)
-// Compensation factor for the VBAT divider
-#define VBAT_DIVIDER_COMP (1.73)
+// VBAT -> 1M -> P0.31 -> 1M -> GND, so VADC / VBAT = 0.5
+#define VBAT_DIVIDER (0.5F)
+// Inverse divider factor used to reconstruct VBAT from VADC
+#define VBAT_DIVIDER_COMP (1.0F / VBAT_DIVIDER)
 // Fixed calculation of milliVolt from compensation value
 #define REAL_VBAT_MV_PER_LSB (VBAT_DIVIDER_COMP * VBAT_MV_PER_LSB)
 #undef AREF_VOLTAGE

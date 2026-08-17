@@ -666,6 +666,7 @@ Unit tests in `test/` directory. The canonical suite count is in `test/native-su
 - `test_meshpacket_serializer/` - Packet serialization
 - `test_mqtt/` - MQTT integration
 - `test_nexthop_routing/` - Next-hop routing logic
+- `test_nrf52_battery_sense/` - nRF52 dual-source battery sensing policy and conversion helpers
 - `test_nodedb_blocked/` - NodeDB blocked-node handling
 - `test_packet_history/` - Packet history tracking
 - `test_packet_signing/` - Packet signing

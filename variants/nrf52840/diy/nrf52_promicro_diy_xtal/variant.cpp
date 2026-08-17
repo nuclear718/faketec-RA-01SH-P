@@ -20,6 +20,7 @@
 
 #include "variant.h"
 #include "nrf.h"
+#include "wiring_analog.h"
 #include "wiring_constants.h"
 #include "wiring_digital.h"
 
@@ -32,6 +33,8 @@ const uint32_t g_ADigitalPinMap[] = {
 
 void initVariant()
 {
+    analogSampleTime(BATTERY_SENSE_SAMPLE_TIME);
+
     // 3V3 Power Rail
     pinMode(PIN_3V3_EN, OUTPUT);
     digitalWrite(PIN_3V3_EN, HIGH);

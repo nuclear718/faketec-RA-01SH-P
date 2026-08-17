@@ -59,6 +59,7 @@ Preserve these local hardware assumptions:
 - LoRa radio: RFM95W / SX127x using `USE_RF95`.
 - SPI pins: MISO `P0.08`, MOSI `P0.06`, SCK `P0.17`.
 - Radio pins: CS `P0.24`, DIO0/IRQ `P0.11`, RESET `P0.09`.
+- Battery sense uses one auto-detecting UF2: prefer `VBAT → 1 MΩ → P0.31/AIN7 → 1 MΩ → GND` with a `2.0` ADC multiplier, otherwise use nRF52840 `VDDH/5` only in high-voltage mode. Keep the 40 µs SAADC sample time. VDDH-only readings are unknown while USB is present.
 - GPS pins use the upstream 2.8 names: `GPS_TX_PIN` for MCU TX to GPS RX and `GPS_RX_PIN` for MCU RX from GPS TX.
 - RF95 custom power behavior is intentional:
   - `RF95_MAX_POWER 20`

@@ -45,6 +45,7 @@
 #endif
 
 #if defined(ARCH_NRF52)
+#include "Nrf52BatterySense.h"
 #include "Nrf52SaadcLock.h"
 #include "concurrency/LockGuard.h"
 #endif
@@ -423,6 +424,21 @@ class AnalogBatteryLevel : public HasBatteryLevel
         // Override variant or default ADC_MULTIPLIER if we have the override pref
         float operativeAdcMultiplier =
             config.power.adc_multiplier_override > 0 ? config.power.adc_multiplier_override : ADC_MULTIPLIER;
+#if defined(ARCH_NRF52) && defined(HAS_NRF52_DUAL_BATTERY_SENSE)
+        const uint32_t min_read_interval = 5000;
+        if (batteryVoltageFilter.lastValidSource() == nrf52battery::Source::VDDH_DIV5 && powerHAL_isVBUSConnected()) {
+            batteryVoltageFilter.invalidate();
+        }
+
+        if (!battery_read_attempted || !Throttle::isWithinTimespanMs(last_read_time_ms, min_read_interval)) {
+            battery_read_attempted = true;
+            last_read_time_ms = millis();
+            battery_adcEnable();
+            batteryVoltageFilter.update(nrf52BatterySense.read(operativeAdcMultiplier));
+            battery_adcDisable();
+        }
+        return batteryVoltageFilter.currentMillivolts();
+#else
         // Do not call analogRead() often.
         const uint32_t min_read_interval = 5000;
         if (!initial_read_done || !Throttle::isWithinTimespanMs(last_read_time_ms, min_read_interval)) {
@@ -481,6 +497,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
             // BATTERY_PIN, raw, (uint32_t)(scaled), (uint32_t) (last_read_value));
         }
         return last_read_value;
+#endif
 #endif // BATTERY_PIN
         return 0;
     }
@@ -522,6 +539,8 @@ class AnalogBatteryLevel : public HasBatteryLevel
     // battery is always connected
 #ifdef BATTERY_IMMUTABLE
     virtual bool isBatteryConnect() override { return true; }
+#elif defined(ARCH_NRF52) && defined(HAS_NRF52_DUAL_BATTERY_SENSE)
+    virtual bool isBatteryConnect() override { return getBattVoltage() != 0; }
 #elif defined(ADC_V)
     virtual bool isBatteryConnect() override
     {
@@ -556,7 +575,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 // technically speaking this should work for all(?) NRF52 boards
 // but needs testing across multiple devices. NRF52 USB would not even work if
 // VBUS was not properly connected and detected by the CPU
-#elif defined(MUZI_BASE) || defined(PROMICRO_DIY_TCXO)
+#elif defined(HAS_NRF52_VBUS_DETECT) || defined(MUZI_BASE) || defined(PROMICRO_DIY_TCXO)
         return powerHAL_isVBUSConnected();
 #endif
         return getBattVoltage() > chargingVolt;
@@ -617,6 +636,11 @@ class AnalogBatteryLevel : public HasBatteryLevel
     bool initial_read_done = false;
     float last_read_value = (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS);
     uint32_t last_read_time_ms = 0;
+#if defined(ARCH_NRF52) && defined(HAS_NRF52_DUAL_BATTERY_SENSE)
+    bool battery_read_attempted = false;
+    nrf52battery::Nrf52BatterySense nrf52BatterySense;
+    nrf52battery::VoltageFilter batteryVoltageFilter;
+#endif
 #ifdef ARCH_STM32
     // 3300mV placeholder for STM32 errata where VREFINT factory calibration may be missing
     // (e.g. STM32U0, see DS14756 Rev 3 §2.4.1 "VREFINT offset")
