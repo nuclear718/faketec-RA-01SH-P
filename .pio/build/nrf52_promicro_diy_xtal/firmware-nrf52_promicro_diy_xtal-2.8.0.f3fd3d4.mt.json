@@ -1,0 +1,44 @@
+{
+  "version": "2.8.0.f3fd3d4",
+  "build_epoch": 1787068800,
+  "platformioTarget": "nrf52_promicro_diy_xtal",
+  "mcu": "nrf52840",
+  "repo": "nuclear718/faketec-RA-01SH-P",
+  "files": [
+    {
+      "name": "firmware-nrf52_promicro_diy_xtal-2.8.0.f3fd3d4.elf",
+      "md5": "e5b7bdfe1ffce319c55a594f4aa7c4ed",
+      "bytes": 1212316
+    },
+    {
+      "name": "firmware-nrf52_promicro_diy_xtal-2.8.0.f3fd3d4.hex",
+      "md5": "09a0f3c5b4a87c7f64a9786d8ed0562e",
+      "bytes": 2010851
+    },
+    {
+      "name": "firmware-nrf52_promicro_diy_xtal-2.8.0.f3fd3d4.uf2",
+      "md5": "38b56a52239a4ed1d7b8f548e0aee57d",
+      "bytes": 1430016
+    },
+    {
+      "name": "firmware-nrf52_promicro_diy_xtal-2.8.0.f3fd3d4-ota.zip",
+      "md5": "0eed271aad2f1c52595e6e3f721f82e3",
+      "bytes": 715927
+    }
+  ],
+  "has_mui": false,
+  "has_inkhud": false,
+  "hwModel": 63,
+  "hwModelSlug": "NRF52_PROMICRO_DIY",
+  "architecture": "nrf52840",
+  "activelySupported": true,
+  "displayName": "NRF52 Pro-micro DIY RFM95W",
+  "supportLevel": 3,
+  "images": [
+    "promicro.svg"
+  ],
+  "tags": [
+    "DIY"
+  ],
+  "requiresDfu": true
+}
