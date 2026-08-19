@@ -24,6 +24,8 @@ struct CryptoKey {
 #define MAX_BLOCKSIZE 256
 #define TEST_CURVE25519_FIELD_OPS // Exposes Curve25519::isWeakPoint() for testing keys
 #define XEDDSA_SIGNATURE_SIZE 64
+// Encoded Data overhead: one-byte tag, one-byte length, and the signature.
+#define XEDDSA_SIGNATURE_FIELD_BYTES (XEDDSA_SIGNATURE_SIZE + 2)
 
 class CryptoEngine
 {

@@ -13,7 +13,7 @@
 #include "TestUtil.h"
 #include <unity.h>
 
-#if !(MESHTASTIC_EXCLUDE_PKI)
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
 
 #include "mesh/Channels.h"
 #include "mesh/CryptoEngine.h"
@@ -23,6 +23,7 @@
 #include <cstdio>
 #include <cstring>
 #include <memory>
+#include <pb_encode.h>
 #include <vector>
 
 // ---------------------------------------------------------------------------
@@ -124,6 +125,20 @@ static DecodeState roundTrip(meshtastic_MeshPacket *p)
 static bool remoteSignerBit()
 {
     return nodeInfoLiteHasXeddsaSigned(mockNodeDB->getMeshNode(REMOTE_NODE));
+}
+
+static size_t encodedDataSize(const meshtastic_Data *data)
+{
+    size_t size = 0;
+    TEST_ASSERT_TRUE_MESSAGE(pb_get_encoded_size(&size, &meshtastic_Data_msg, data), "pb_get_encoded_size failed");
+    return size;
+}
+
+static bool signedEncodingFits(const meshtastic_Data *data)
+{
+    meshtastic_Data signedData = *data;
+    signedData.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
+    return encodedDataSize(&signedData) + MESHTASTIC_HEADER_LENGTH <= MAX_LORA_PAYLOAD_LEN;
 }
 
 // ---------------------------------------------------------------------------
@@ -251,6 +266,18 @@ void test_A7_unsigned_oversized_broadcast_from_signer_accepted(void)
     TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&p));
 }
 
+void test_A8_partial_xeddsa_signature_rejected(void)
+{
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setSignerBit(REMOTE_NODE, true);
+
+    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_PRIVATE_APP, 110);
+    p.decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE - 1;
+    memset(p.decoded.xeddsa_signature.bytes, 0x5A, p.decoded.xeddsa_signature.size);
+
+    TEST_ASSERT_EQUAL(DECODE_FAILURE, roundTrip(&p));
+}
+
 // ===========================================================================
 // Group B — send-side signing policy (perhapsEncode)
 // ===========================================================================
@@ -288,6 +315,37 @@ void test_B3_local_oversized_broadcast_not_signed(void)
 
     TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&p));
     TEST_ASSERT_EQUAL_MESSAGE(0, p.decoded.xeddsa_signature.size, "oversized broadcast must not be signed");
+}
+
+void test_B4_private_app_boundary_has_no_xeddsa_deadband(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->setPublicKey(LOCAL_NODE, pub);
+
+    const size_t boundaryPayloads[] = {165, 166, 167, 168, 169, 180};
+    for (const size_t payloadSize : boundaryPayloads) {
+        char message[40];
+        snprintf(message, sizeof(message), "PRIVATE_APP payload size %u", (unsigned)payloadSize);
+
+        meshtastic_MeshPacket p =
+            makeDecoded(LOCAL_NODE, NODENUM_BROADCAST, meshtastic_PortNum_PRIVATE_APP, payloadSize);
+        TEST_ASSERT_EQUAL_MESSAGE(DECODE_SUCCESS, roundTrip(&p), message);
+
+        const bool isSigned = p.decoded.xeddsa_signature.size == XEDDSA_SIGNATURE_SIZE;
+        TEST_ASSERT_EQUAL_MESSAGE(signedEncodingFits(&p.decoded), isSigned, message);
+
+        meshtastic_Data signedData = p.decoded;
+        signedData.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
+        const size_t signedFrameSize = encodedDataSize(&signedData) + MESHTASTIC_HEADER_LENGTH;
+        if (payloadSize == 165)
+            TEST_ASSERT_EQUAL_MESSAGE(MAX_LORA_PAYLOAD_LEN, signedFrameSize,
+                                      "165-byte PRIVATE_APP must exactly fit signed");
+        if (payloadSize == 166)
+            TEST_ASSERT_EQUAL_MESSAGE(MAX_LORA_PAYLOAD_LEN + 1, signedFrameSize,
+                                      "166-byte PRIVATE_APP must be the first unsigned size");
+    }
 }
 
 // ===========================================================================
@@ -361,11 +419,13 @@ void setup()
     RUN_TEST(test_A5_unsigned_broadcast_from_nonsigner_accepted);
     RUN_TEST(test_A6_unsigned_unicast_from_signer_accepted);
     RUN_TEST(test_A7_unsigned_oversized_broadcast_from_signer_accepted);
+    RUN_TEST(test_A8_partial_xeddsa_signature_rejected);
 
     printf("\n=== Group B: send-side signing policy ===\n");
     RUN_TEST(test_B1_local_broadcast_is_signed);
     RUN_TEST(test_B2_local_unicast_not_signed);
     RUN_TEST(test_B3_local_oversized_broadcast_not_signed);
+    RUN_TEST(test_B4_private_app_boundary_has_no_xeddsa_deadband);
 
     printf("\n=== Group C: NodeInfoModule downgrade drop ===\n");
     RUN_TEST(test_C1_unsigned_nodeinfo_from_signer_dropped);
@@ -377,7 +437,7 @@ void setup()
 
 void loop() {}
 
-#else // MESHTASTIC_EXCLUDE_PKI
+#else // XEdDSA or PKI excluded
 
 void setUp(void) {}
 void tearDown(void) {}

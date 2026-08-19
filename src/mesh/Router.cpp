@@ -12,6 +12,7 @@
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
 #include "modules/RoutingModule.h"
+#include <pb_encode.h>
 #if HAS_TRAFFIC_MANAGEMENT
 #include "modules/TrafficManagementModule.h"
 #endif
@@ -542,6 +543,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
             p->decoded.want_response |= p->decoded.bitfield & BITFIELD_WANT_RESPONSE_MASK;
 
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+        p->xeddsa_signed = false;
         if (p->decoded.xeddsa_signature.size == XEDDSA_SIGNATURE_SIZE) {
             meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->from);
             if (node && node->public_key.size == 32) {
@@ -559,14 +561,18 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
             } else {
                 LOG_DEBUG("No public key for 0x%08x, cannot verify XEdDSA signature", p->from);
             }
+        } else if (p->decoded.xeddsa_signature.size != 0) {
+            LOG_WARN("Malformed XEdDSA signature (%u bytes) from 0x%08x, dropping",
+                     (unsigned)p->decoded.xeddsa_signature.size, p->from);
+            return DecodeState::DECODE_FAILURE;
         } else {
             // Unsigned packet — only reject the class of packet a signing node always signs:
-            // an unencrypted broadcast small enough to also carry a signature (see perhapsEncode()).
+            // an unencrypted broadcast whose exact encoded Data can also carry a signature.
             // Unicast packets and oversized broadcasts are never signed, so they must not be
             // hard-failed here even if this node has signed before.
             const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->from);
-            if (node && nodeInfoLiteHasXeddsaSigned(node) && isBroadcast(p->to) &&
-                p->decoded.payload.size + XEDDSA_SIGNATURE_SIZE < meshtastic_Constants_DATA_PAYLOAD_LEN) {
+            if (node && nodeInfoLiteHasXeddsaSigned(node) && !p->pki_encrypted && isBroadcast(p->to) &&
+                rawSize + XEDDSA_SIGNATURE_FIELD_BYTES + MESHTASTIC_HEADER_LENGTH <= MAX_LORA_PAYLOAD_LEN) {
                 LOG_WARN("Dropping unsigned broadcast from 0x%08x that previously signed", p->from);
                 return DecodeState::DECODE_FAILURE;
             }
@@ -629,6 +635,18 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     }
 }
 
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+static bool signedDataFits(meshtastic_Data *data)
+{
+    const pb_size_t previousSignatureSize = data->xeddsa_signature.size;
+    data->xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
+    size_t encodedSize;
+    const bool sized = pb_get_encoded_size(&encodedSize, &meshtastic_Data_msg, data);
+    data->xeddsa_signature.size = previousSignatureSize;
+    return sized && encodedSize + MESHTASTIC_HEADER_LENGTH <= MAX_LORA_PAYLOAD_LEN;
+}
+#endif
+
 /** Return 0 for success or a Routing_Error code for failure
  */
 meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
@@ -643,11 +661,9 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             p->decoded.has_bitfield = true;
             p->decoded.bitfield |= (config.lora.config_ok_to_mqtt << BITFIELD_OK_TO_MQTT_SHIFT);
             p->decoded.bitfield |= (p->decoded.want_response << BITFIELD_WANT_RESPONSE_SHIFT);
+            p->decoded.xeddsa_signature.size = 0;
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
-            // Sign broadcast packets if payload + signature fits within the max Data payload.
-            // The actual encoded size is checked after pb_encode (TOO_LARGE).
-            if (!p->pki_encrypted && isBroadcast(p->to) &&
-                p->decoded.payload.size + XEDDSA_SIGNATURE_SIZE < meshtastic_Constants_DATA_PAYLOAD_LEN) {
+            if (!p->pki_encrypted && isBroadcast(p->to) && signedDataFits(&p->decoded)) {
                 if (crypto->xeddsa_sign(p->from, p->id, p->decoded.portnum, p->decoded.payload.bytes, p->decoded.payload.size,
                                         p->decoded.xeddsa_signature.bytes)) {
                     p->decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
