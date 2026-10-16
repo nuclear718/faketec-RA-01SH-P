@@ -388,23 +388,24 @@ A well-structured test suite follows this pattern:
 
 ## Existing Test Suites
 
-| Suite                        | Module Under Test             |
-| ---------------------------- | ----------------------------- |
-| `test_admin_radio`           | Admin + LoRa region config    |
-| `test_atak`                  | ATAK integration              |
-| `test_crypto`                | CryptoEngine                  |
-| `test_default`               | Default configuration helpers |
-| `test_hop_scaling`           | Hop scaling algorithm         |
-| `test_http_content_handler`  | HTTP handling                 |
-| `test_mac_from_string`       | MAC address parsing           |
-| `test_mesh_module`           | Module framework              |
-| `test_meshpacket_serializer` | Packet serialization          |
-| `test_mqtt`                  | MQTT integration              |
-| `test_packet_history`        | Packet history tracking       |
-| `test_position_precision`    | Position precision helpers    |
-| `test_radio`                 | Radio interface               |
-| `test_serial`                | Serial communication          |
-| `test_traffic_management`    | Traffic management            |
-| `test_transmit_history`      | Retransmission tracking       |
-| `test_type_conversions`      | NodeDB v25 type conversions   |
-| `test_utf8`                  | UTF-8 utilities               |
+| Suite                        | Module Under Test                                                                            |
+| ---------------------------- | -------------------------------------------------------------------------------------------- |
+| `test_admin_radio`           | Admin + LoRa region config                                                                   |
+| `test_atak`                  | ATAK integration                                                                             |
+| `test_crypto`                | CryptoEngine                                                                                 |
+| `test_default`               | Default configuration helpers                                                                |
+| `test_hop_scaling`           | Hop scaling algorithm                                                                        |
+| `test_http_content_handler`  | HTTP handling                                                                                |
+| `test_mac_from_string`       | MAC address parsing                                                                          |
+| `test_mesh_module`           | Module framework                                                                             |
+| `test_meshpacket_serializer` | Packet serialization                                                                         |
+| `test_mqtt`                  | MQTT integration                                                                             |
+| `test_node_identity`         | First-region identity, boot migration, conservative legacy recovery and persistence failures |
+| `test_packet_history`        | Packet history tracking                                                                      |
+| `test_position_precision`    | Position precision helpers                                                                   |
+| `test_radio`                 | Radio interface                                                                              |
+| `test_serial`                | Serial communication                                                                         |
+| `test_traffic_management`    | Traffic management                                                                           |
+| `test_transmit_history`      | Retransmission tracking                                                                      |
+| `test_type_conversions`      | NodeDB v25 type conversions                                                                  |
+| `test_utf8`                  | UTF-8 utilities                                                                              |

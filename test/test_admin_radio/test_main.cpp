@@ -1163,6 +1163,7 @@ void setUp(void)
     mockMeshService = new MockMeshService();
     service = mockMeshService;
     testAdmin = new AdminModuleTestShim();
+    testAdmin->deferSaves();
 }
 void tearDown(void)
 {

@@ -12,7 +12,7 @@
 //   - exec() short-circuits to "" (no popen/shell in the browser).
 // Downstream is unchanged: Ch341Hal -> libpinedio_webusb.c -> WebUSB.
 
-#include "CryptoEngine.h"   // crypto->ensurePkiKeys()
+#include "CryptoEngine.h"   // crypto availability
 #include "MeshRadio.h"      // initRegion()
 #include "MeshService.h"    // service->reloadConfig()
 #include "NodeDB.h"         // config, owner globals + SEGMENT_CONFIG
@@ -264,7 +264,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE int wasm_set_region(int region)
     if (wasUnset && newRegion > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
         if (crypto)
-            crypto->ensurePkiKeys(config.security, owner); // first real region -> generate keys
+            nodeDB->ensureLocalPkiKeys(); // first real region -> generate keys
 #endif
         validated.tx_enabled = true;
     }

@@ -923,7 +923,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                 if (isRegionUnset && validatedLora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
                     if (crypto) {
-                        crypto->ensurePkiKeys(config.security, owner);
+                        nodeDB->ensureLocalPkiKeys();
                     }
 #endif
                     // new region is valid and we're coming from an unset region, so enable tx

@@ -464,56 +464,19 @@ NodeDB::NodeDB()
 
     // likewise - we always want the app requirements to come from the running appload
     myNodeInfo.min_app_version = 30200; // format is Mmmss (where M is 1+the numeric major number. i.e. 30200 means 2.2.00
-    pickNewNodeNum();
-
-    // Set our board type so we can share it with others
-    owner.hw_model = HW_VENDOR;
-    // Ensure user (nodeinfo) role is set to whatever we're configured to
-    owner.role = config.device.role;
-    // Ensure macaddr is set to our macaddr as it will be copied in our info below
-    memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
-    // Ensure owner.id is always derived from the node number
-    snprintf(owner.id, sizeof(owner.id), "!%08x", getNodeNum());
-
-    if (!config.has_security) {
-        config.has_security = true;
-        config.security = meshtastic_Config_SecurityConfig_init_default;
-        config.security.serial_enabled = config.device.serial_enabled;
-        config.security.is_managed = config.device.is_managed;
-    }
-
-#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-    // Generate crypto keys if needed using consolidated function
-    // Set my node num uint32 value to bytes from the public key (if we have one)
-    // Generate identity and crypto keys if needed; this will create a new identity if one does not exist.
-    // Skip on a degraded boot: the keypair isn't in RAM, so minting one would change our NodeNum.
-    if (!configDecodeFailed)
-        generateCryptoKeyPair(nullptr);
-#elif !(MESHTASTIC_EXCLUDE_PKI)
-    // Calculate Curve25519 public and private keys
-    if (config.security.private_key.size == 32 && config.security.public_key.size == 32) {
-        owner.public_key.size = config.security.public_key.size;
-        memcpy(owner.public_key.bytes, config.security.public_key.bytes, config.security.public_key.size);
-        crypto->setDHPrivateKey(config.security.private_key.bytes);
-        // Set my node num uint32 value to bytes from the new public key
-        myNodeInfo.my_node_num = crc32Buffer(config.security.public_key.bytes, config.security.public_key.size);
-    }
-#endif
-    // Identity is now established, so run the self-care pass on the store
-    // loadFromDisk() deliberately left untrimmed: confirm self, trim/demote only
-    // non-self overflow, pin self to index 0, rewrite once if healed.
-    nodeDBSelfCare();
+    initializeNodeIdentity();
 
     // If we migrated from legacy during loadFromDisk(), persist the migrated DB
     // only after identity and self-care are established.
     if (migrationSavePending) {
-        saveNodeDatabaseToDisk();
+        if (!identitySavePending)
+            saveNodeDatabaseToDisk();
         migrationSavePending = false;
     }
 
     // If node database has not been saved for the first time, save it now
 #ifdef FSCom
-    if (!FSCom.exists(nodeDatabaseFileName)) {
+    if (!identitySavePending && !FSCom.exists(nodeDatabaseFileName)) {
         saveNodeDatabaseToDisk();
     }
 #endif
@@ -677,6 +640,61 @@ NodeDB::NodeDB()
 #endif
     sortMeshDB();
     saveToDisk(saveWhat);
+}
+
+void NodeDB::initializeNodeIdentity()
+{
+    getMacAddr(ourMacAddr);
+    const bool localOwner = devicestate.has_owner && memcmp(owner.macaddr, ourMacAddr, sizeof(owner.macaddr)) == 0;
+    if (!configDecodeFailed)
+        pickNewNodeNum();
+
+    // Set our board type so we can share it with others
+    owner.hw_model = HW_VENDOR;
+    // Ensure user (nodeinfo) role is set to whatever we're configured to
+    owner.role = config.device.role;
+    // Ensure macaddr is set to our macaddr as it will be copied in our info below
+    memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
+    // Ensure owner.id is always derived from the node number
+    snprintf(owner.id, sizeof(owner.id), "!%08x", getNodeNum());
+
+    if (!config.has_security) {
+        config.has_security = true;
+        config.security = meshtastic_Config_SecurityConfig_init_default;
+        config.security.serial_enabled = config.device.serial_enabled;
+        config.security.is_managed = config.device.is_managed;
+    }
+
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+    // Generate crypto keys if needed using consolidated function
+    // Set my node num uint32 value to bytes from the public key (if we have one)
+    // Generate identity and crypto keys if needed; this will create a new
+    // identity if one does not exist. Skip on a degraded boot: the keypair isn't
+    // in RAM, so minting one would change our NodeNum.
+    if (!configDecodeFailed)
+        generateCryptoKeyPair(nullptr);
+#elif !(MESHTASTIC_EXCLUDE_PKI)
+    // Calculate Curve25519 public and private keys
+    if (config.security.private_key.size == 32 && config.security.public_key.size == 32) {
+        owner.public_key.size = config.security.public_key.size;
+        memcpy(owner.public_key.bytes, config.security.public_key.bytes, config.security.public_key.size);
+        crypto->setDHPrivateKey(config.security.private_key.bytes);
+        // Set my node num uint32 value to bytes from the new public key
+        myNodeInfo.my_node_num = crc32Buffer(config.security.public_key.bytes, config.security.public_key.size);
+    }
+#endif
+    // Identity is now established, so run the self-care pass on the store
+    // loadFromDisk() deliberately left untrimmed: confirm self, trim/demote only
+    // non-self overflow, pin self to index 0, rewrite once if healed.
+    snprintf(owner.id, sizeof(owner.id), "!%08x", getNodeNum());
+    if (!configDecodeFailed && localOwner && !legacySelfRepairComplete && owner.public_key.size == 32 &&
+        config.security.private_key.size == 32 && !owner.is_licensed &&
+        getNodeNum() == crc32Buffer(owner.public_key.bytes, owner.public_key.size)) {
+        if (repairLegacySelfEntry())
+            identitySavePending = true;
+        legacySelfRepairPending = true;
+    }
+    nodeDBSelfCare();
 }
 
 /**
@@ -1911,16 +1929,26 @@ void NodeDB::pickNewNodeNum()
     getMacAddr(ourMacAddr); // Make sure ourMacAddr is set
     if (nodeNum == 0) {
         // Pick an initial nodenum based on the macaddr
-        nodeNum = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
+        nodeNum =
+            (uint32_t(ourMacAddr[2]) << 24) | (uint32_t(ourMacAddr[3]) << 16) | (uint32_t(ourMacAddr[4]) << 8) | ourMacAddr[5];
     }
 
-    // Identity check via public key (or "empty slot?" when no keys yet);
-    // macaddr no longer lives on the slim header.
+    // A persisted pre-PKI self row has user fields but no key yet.
     auto isOurOwnEntry = [&](const meshtastic_NodeInfoLite *n) -> bool {
         if (!n)
             return false;
-        if (owner.public_key.size == 32 && n->public_key.size == 32)
-            return memcmp(n->public_key.bytes, owner.public_key.bytes, 32) == 0;
+        if (n->public_key.size == 32) {
+            if (owner.public_key.size == 32 && memcmp(n->public_key.bytes, owner.public_key.bytes, 32) == 0)
+                return true;
+            return !configDecodeFailed && config.security.public_key.size == 32 && config.security.private_key.size == 32 &&
+                   memcmp(n->public_key.bytes, config.security.public_key.bytes, 32) == 0;
+        }
+        if (n->public_key.size == 0 && n->num == myNodeInfo.my_node_num && devicestate.has_my_node && devicestate.has_owner &&
+            memcmp(owner.macaddr, ourMacAddr, sizeof(owner.macaddr)) == 0 && matchesLocalUser(*n)) {
+            char persistedId[sizeof(owner.id)];
+            snprintf(persistedId, sizeof(persistedId), "!%08x", n->num);
+            return strcmp(owner.id, persistedId) == 0;
+        }
         return !nodeInfoLiteHasUser(n);
     };
 
@@ -2105,7 +2133,7 @@ void NodeDB::nodeDBSelfCare()
     const bool storageLocked = false;
 #endif
 
-    if ((nodesOverCap || satsTrimmed) && !storageLocked) {
+    if ((nodesOverCap || satsTrimmed) && !storageLocked && !identitySavePending) {
         LOG_MIGRATION("NodeDB self-care: healed store (nodes-over-cap:%s sats-trimmed:%s); rewriting nodes.proto once",
                       nodesOverCap ? "yes" : "no", satsTrimmed ? "yes" : "no");
         saveNodeDatabaseToDisk();
@@ -2129,6 +2157,9 @@ void NodeDB::loadFromDisk()
 #endif
 
     migrationSavePending = false;
+    identitySavePending = false;
+    legacySelfRepairPending = false;
+    legacySelfRepairComplete = readSelfRepairMarker();
     configDecodeFailed = false;
 
     meshtastic_Config_SecurityConfig backupSecurity = meshtastic_Config_SecurityConfig_init_zero;
@@ -2690,6 +2721,7 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
         bool ok = EncryptedStorage::encryptAndWrite(filename, pbBuf.get(), encodedSize, fullAtomic);
 
         if (!ok) {
+            prefsWriteFailed = true;
             LOG_ERROR("EncryptedStorage: Failed to encrypt and write %s", filename);
         }
         return ok;
@@ -2712,6 +2744,7 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
     bool writeSucceeded = f.close();
 
     if (!okay || !writeSucceeded) {
+        prefsWriteFailed = true;
         LOG_ERROR("Can't write prefs!");
     }
 #else
@@ -2853,7 +2886,8 @@ bool NodeDB::saveNodeDatabaseToDisk()
 
     size_t nodeDatabaseSize;
     pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &nodeDatabase);
-    bool ok = saveProto(nodeDatabaseFileName, nodeDatabaseSize, &meshtastic_NodeDatabase_msg, &nodeDatabase, false);
+    bool ok = saveProto(nodeDatabaseFileName, nodeDatabaseSize, &meshtastic_NodeDatabase_msg, &nodeDatabase,
+                        identitySavePending || legacySelfRepairPending);
 
     nodeDatabase.positions.clear();
     nodeDatabase.positions.shrink_to_fit();
@@ -2901,6 +2935,19 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         return true;
     }
 #endif
+
+    const bool identityUpdate = identitySavePending || legacySelfRepairPending;
+#ifdef FSCom
+    if (identityUpdate && xModem.isBusy()) {
+        LOG_DEBUG("Deferring identity save: xmodem transfer in progress");
+        return false;
+    }
+#endif
+    prefsWriteFailed = false;
+    if (identitySavePending)
+        saveWhat |= SEGMENT_CONFIG | SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
+    if (legacySelfRepairPending)
+        saveWhat |= SEGMENT_NODEDATABASE;
 
     bool success = true;
 #ifdef FSCom
@@ -2956,6 +3003,15 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         success &= saveNodeDatabaseToDisk();
     }
 
+    if (identityUpdate && prefsWriteFailed)
+        success = false;
+    if (success) {
+        identitySavePending = false;
+        if (legacySelfRepairPending && writeSelfRepairMarker()) {
+            legacySelfRepairComplete = true;
+            legacySelfRepairPending = false;
+        }
+    }
     return success;
 }
 
@@ -2970,7 +3026,13 @@ bool NodeDB::saveToDisk(int saveWhat)
         return false;
     }
 
+    const bool preserveOnFailure = identitySavePending || legacySelfRepairPending;
     bool success = saveToDiskNoRetry(saveWhat);
+
+    if (!success && preserveOnFailure) {
+        LOG_ERROR("Identity save failed; retaining preferences and pending repair for retry");
+        return false;
+    }
 
     if (!success) {
         LOG_ERROR("Failed to save to disk, retrying");
@@ -3865,6 +3927,106 @@ bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
 #endif
 }
 
+bool NodeDB::matchesLocalUser(const meshtastic_NodeInfoLite &node) const
+{
+    meshtastic_NodeInfoLite expected = meshtastic_NodeInfoLite_init_zero;
+    TypeConversions::CopyUserToNodeInfoLite(&expected, owner);
+    return nodeInfoLiteHasUser(&node) && strcmp(node.long_name, expected.long_name) == 0 &&
+           strcmp(node.short_name, expected.short_name) == 0 && node.hw_model == expected.hw_model &&
+           node.role == expected.role && nodeInfoLiteIsLicensed(&node) == owner.is_licensed;
+}
+
+bool NodeDB::ensureLocalPkiKeys()
+{
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+    if (!crypto || !crypto->ensurePkiKeys(config.security, owner))
+        return false;
+    config.has_security = true;
+    snprintf(owner.id, sizeof(owner.id), "!%08x", getNodeNum());
+    auto *self = getOrCreateMeshNode(getNodeNum());
+    if (!self)
+        return false;
+    TypeConversions::CopyUserToNodeInfoLite(self, owner);
+    identitySavePending = true;
+    return true;
+#else
+    return false;
+#endif
+}
+
+namespace
+{
+constexpr char selfRepairMarkerPath[] = "/prefs/self-identity-v1";
+constexpr uint8_t selfRepairMarker[] = {'S', 'E', 'L', 'F', 1};
+} // namespace
+
+bool NodeDB::readSelfRepairMarker()
+{
+#ifdef FSCom
+    concurrency::LockGuard guard(spiLock);
+    auto f = FSCom.open(selfRepairMarkerPath, FILE_O_READ);
+    uint8_t marker[sizeof(selfRepairMarker)] = {};
+    const bool valid = f && f.size() == sizeof(marker) && f.read(marker, sizeof(marker)) == sizeof(marker) &&
+                       memcmp(marker, selfRepairMarker, sizeof(marker)) == 0;
+    if (f)
+        f.close();
+    return valid;
+#else
+    return false;
+#endif
+}
+
+bool NodeDB::writeSelfRepairMarker()
+{
+#ifdef FSCom
+    // A one-time repair must not undo a subsequent explicit unignore by the user.
+    SafeFile file(selfRepairMarkerPath, true);
+    const bool written = file.write(selfRepairMarker, sizeof(selfRepairMarker)) == sizeof(selfRepairMarker);
+    return file.close() && written;
+#else
+    return false;
+#endif
+}
+
+bool NodeDB::repairLegacySelfEntry()
+{
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+    if (owner.is_licensed || owner.public_key.size != 32 || config.security.private_key.size != 32 ||
+        getNodeNum() != crc32Buffer(owner.public_key.bytes, owner.public_key.size))
+        return false;
+
+    const NodeNum provisional =
+        (uint32_t(ourMacAddr[2]) << 24) | (uint32_t(ourMacAddr[3]) << 16) | (uint32_t(ourMacAddr[4]) << 8) | ourMacAddr[5];
+    if (provisional == getNodeNum() || provisional < NUM_RESERVED || provisional == NODENUM_BROADCAST)
+        return false;
+    auto *old = getMeshNode(provisional);
+    if (!old || nodeInfoLiteIsIgnored(old) || nodeInfoLiteIsFavorite(old) || nodeInfoLiteIsKeyManuallyVerified(old) ||
+        nodeInfoLiteIsMuted(old) || nodeInfoLiteViaMqtt(old) || old->has_hops_away || old->snr != 0 || !matchesLocalUser(*old))
+        return false;
+
+    // Keyless legacy rows lack proof of ownership: only quarantine the exact
+    // hardware/default-name fingerprint.
+    char defaultLong[sizeof(old->long_name)];
+    char defaultShort[sizeof(old->short_name)];
+    snprintf(defaultLong, sizeof(defaultLong), "Meshtastic %04x", provisional & 0xffff);
+    snprintf(defaultShort, sizeof(defaultShort), "%04x", provisional & 0xffff);
+    const bool sameKey = old->public_key.size == 32 && memcmp(old->public_key.bytes, owner.public_key.bytes, 32) == 0;
+    const bool defaultKeyless =
+        old->public_key.size == 0 && strcmp(old->long_name, defaultLong) == 0 && strcmp(old->short_name, defaultShort) == 0;
+    if (!sameKey && !defaultKeyless)
+        return false;
+
+    // Retain the row and satellites; favourite/verified records are never changed
+    // by this recovery.
+    if (!setProtectedFlag(old, NODEINFO_BITFIELD_IS_IGNORED_MASK, true))
+        return false;
+    LOG_INFO("Quarantined legacy self candidate 0x%08x (current 0x%08x)", provisional, getNodeNum());
+    return true;
+#else
+    return false;
+#endif
+}
+
 bool NodeDB::createNewIdentity()
 {
     uint32_t oldNodeNum = getNodeNum();
@@ -3883,16 +4045,20 @@ bool NodeDB::createNewIdentity()
         memset(node->public_key.bytes, 0, sizeof(node->public_key.bytes));
     }
 
-    // Drop satellite-store entries (position/telemetry/environment/status) keyed by the retired
-    // node number so stale data isn't left attached to the old identity.
+    // Drop satellite-store entries (position/telemetry/environment/status) keyed
+    // by the retired node number so stale data isn't left attached to the old
+    // identity.
     eraseNodeSatellites(oldNodeNum);
 
     myNodeInfo.my_node_num = newNodeNum;
+    snprintf(owner.id, sizeof(owner.id), "!%08x", newNodeNum);
+    identitySavePending = true;
 
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
     if (!info)
         return false;
     TypeConversions::CopyUserToNodeInfoLite(info, owner);
+    nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_IS_IGNORED_MASK, false);
 
     return true;
 }

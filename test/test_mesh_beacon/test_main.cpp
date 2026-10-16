@@ -44,6 +44,14 @@
         TEST_MESSAGE(_buf);                                                                                                      \
     } while (0)
 
+class AdminModuleTestShim : public AdminModule
+{
+  public:
+    // These validation tests do not provide a persistent NodeDB.
+    AdminModuleTestShim() { hasOpenEditTransaction = true; }
+    using AdminModule::handleSetModuleConfig;
+};
+
 namespace
 {
 
@@ -91,15 +99,6 @@ class MockRouter : public Router
 
     std::vector<meshtastic_MeshPacket> sentPackets;
     std::vector<meshtastic_ChannelSettings> primaryAtSend;
-};
-
-// ---------------------------------------------------------------------------
-// AdminModuleTestShim — exposes protected handleSetModuleConfig.
-// ---------------------------------------------------------------------------
-class AdminModuleTestShim : public AdminModule
-{
-  public:
-    using AdminModule::handleSetModuleConfig;
 };
 
 // ---------------------------------------------------------------------------

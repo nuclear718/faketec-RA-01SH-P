@@ -146,12 +146,11 @@ static bool signedEncodingFits(const meshtastic_Data *data)
 // ---------------------------------------------------------------------------
 void setUp(void)
 {
-    // Clean global config/owner; zeroed config => rebroadcast ALL (no KNOWN_ONLY drop) and
-    // security.private_key.size == 0 (PKI encrypt path skipped => simple channel crypto).
+    mockNodeDB = new MockNodeDB();
+    // The constructor loads persisted config; reset it afterwards to isolate channel-crypto tests from PKI.
     config = meshtastic_LocalConfig_init_zero;
     owner = meshtastic_User_init_zero;
 
-    mockNodeDB = new MockNodeDB();
     mockNodeDB->clearTestNodes();
     nodeDB = mockNodeDB;
     myNodeInfo.my_node_num = LOCAL_NODE; // drives isFromUs()/getFrom()/isToUs()
@@ -329,8 +328,7 @@ void test_B4_private_app_boundary_has_no_xeddsa_deadband(void)
         char message[40];
         snprintf(message, sizeof(message), "PRIVATE_APP payload size %u", (unsigned)payloadSize);
 
-        meshtastic_MeshPacket p =
-            makeDecoded(LOCAL_NODE, NODENUM_BROADCAST, meshtastic_PortNum_PRIVATE_APP, payloadSize);
+        meshtastic_MeshPacket p = makeDecoded(LOCAL_NODE, NODENUM_BROADCAST, meshtastic_PortNum_PRIVATE_APP, payloadSize);
         TEST_ASSERT_EQUAL_MESSAGE(DECODE_SUCCESS, roundTrip(&p), message);
 
         const bool isSigned = p.decoded.xeddsa_signature.size == XEDDSA_SIGNATURE_SIZE;
@@ -340,8 +338,7 @@ void test_B4_private_app_boundary_has_no_xeddsa_deadband(void)
         signedData.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
         const size_t signedFrameSize = encodedDataSize(&signedData) + MESHTASTIC_HEADER_LENGTH;
         if (payloadSize == 165)
-            TEST_ASSERT_EQUAL_MESSAGE(MAX_LORA_PAYLOAD_LEN, signedFrameSize,
-                                      "165-byte PRIVATE_APP must exactly fit signed");
+            TEST_ASSERT_EQUAL_MESSAGE(MAX_LORA_PAYLOAD_LEN, signedFrameSize, "165-byte PRIVATE_APP must exactly fit signed");
         if (payloadSize == 166)
             TEST_ASSERT_EQUAL_MESSAGE(MAX_LORA_PAYLOAD_LEN + 1, signedFrameSize,
                                       "166-byte PRIVATE_APP must be the first unsigned size");

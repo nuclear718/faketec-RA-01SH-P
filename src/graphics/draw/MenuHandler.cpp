@@ -203,7 +203,7 @@ static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region, bool
     auto changes = SEGMENT_CONFIG;
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
     if (crypto) {
-        crypto->ensurePkiKeys(config.security, owner);
+        nodeDB->ensureLocalPkiKeys();
     }
 #endif
     initRegion();

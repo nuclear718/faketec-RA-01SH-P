@@ -148,7 +148,7 @@ On top of authorization, any remote admin message that **mutates** state (not a 
 
 - **`factory_reset_device`** (the "full" variant, calls `NodeDB::factoryReset(eraseBleBonds=true)`) → **wipes** the X25519 private key; a fresh keypair is generated on the next region-set. Every existing peer holds the old public key, so DMs to this node silently fail PKI decrypt until every peer re-exchanges NodeInfo.
 - **`factory_reset_config`** (the "partial" variant, calls `NodeDB::factoryReset()` with `eraseBleBonds=false`) → **preserves** the X25519 private key in `installDefaultConfig(preserveKey=true)`; the public key is zeroed and gets rebuilt from the preserved private key on the next boot via the NodeDB path's `regeneratePublicKey` call. Identity is preserved and the mesh does not need to re-exchange keys.
-- **`region=UNSET → valid region`** → `ensurePkiKeys` runs inside the same `handleSetConfig` path; missing keys get generated at that moment.
+- **`region=UNSET → valid region`** → `NodeDB::ensureLocalPkiKeys()` generates missing keys and synchronizes the current self row without renumbering an open phone session. The next save includes config, DeviceState and NodeDB; boot performs the public-key NodeNum transition and retires the actual prior self.
 - **Ham mode transitions** — entering Ham mode (`user.is_licensed=true`) runs `Channels::ensureLicensedOperation`, which **wipes every channel PSK** (all traffic becomes cleartext) and disables the legacy admin channel. The X25519 private key is preserved on the device but not used because `Router::send` skips PKI when `owner.is_licensed` is true. Leaving Ham mode re-enables PKI with the preserved keypair but does not restore the wiped channel PSKs — the operator has to re-set them.
 - **Channel 0 PSK change** → every peer must re-learn the channel hash; cached NodeInfo becomes temporarily unreachable until the next broadcast.
 - **`security.private_key` blanked via admin** → regenerates both halves (unless in Ham mode) and propagates the new public key via NodeInfo.
@@ -227,6 +227,12 @@ Only the freshest `MAX_SATELLITE_NODES` nodes keep satellite payloads; the rest 
 ### On-boot self-care
 
 `NodeDB::nodeDBSelfCare()` runs once identity is established (the constructor after key (re)gen, and `reloadFromDisk()` — _not_ inside `loadFromDisk`, where `getNodeNum()` is still 0). It confirms self is present (warns if a non-empty DB is missing us — a foreign/over-cap file), pins self to index 0, demotes/trims only **non-self** overflow into the warm tier, then rewrites `nodes.proto` **once** and only if it healed something — and never while encrypted storage is locked (it would persist placeholder defaults). `loadFromDisk` deliberately leaves the loaded store untrimmed for this pass.
+
+### Local identity migration
+
+`initializeNodeIdentity()` retains a persisted keyless self only when DeviceState's node ID, owner ID, hardware MAC and user fields agree. A conflicting peer key still invokes collision avoidance. Runtime region key generation uses `ensureLocalPkiKeys()` across admin, display and WASM entry points; do not replace those calls with the lower-level crypto-only helper.
+
+Existing default-name ghosts are checked once on a healthy keyed boot. Recovery is limited to the hardware-derived provisional NodeNum, matching local user/model/role, no peer hop/MQTT/SNR evidence and no favourite/verified/muted protection. A different public key is always preserved; a keyless record additionally requires the exact default names. This is a conservative fingerprint, not cryptographic proof for keyless records. Recovery only marks ignored and retains the row and satellite data. Ambiguous custom-name records remain unchanged. `/prefs/self-identity-v1` records completion after saving, so a later explicit unignore is respected. Identity saves use atomic replacement for NodeDB and defer while xmodem is active. Write failures retain the old files and pending work; they do not invoke the filesystem-format recovery path.
 
 ### Sync flow: thin NodeInfo + post-COMPLETE_ID replay (no opt-in)
 
